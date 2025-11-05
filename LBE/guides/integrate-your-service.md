@@ -1,4 +1,14 @@
-# Integrat## 1. Decide What The Service Needs
+# Integrate Your Service
+
+Follow this guide when another service in the platform needs to trust the auth service. Think of it as adding a new ride to the theme park: you must connect power, safety checks, and admission rules before opening the gate.
+
+## Prerequisites
+
+- Local environment ready (`guides/local-environment.md`).
+- Service you are integrating can call HTTP endpoints and validate JWTs.
+- Database migrations pipeline capable of updating the `auth` schema.
+
+## 1. Decide What The Service Needs
 
 - List the actions your service must perform (e.g., "Reporting service needs to read employer payment summaries").
 - Map each action to existing endpoints or design new ones.
@@ -16,31 +26,17 @@
 
 - Implement your service endpoints with appropriate security annotations.
 - Register the endpoint in `auth.endpoints` and link it via `auth.endpoint_policies`.
-- Update API documentation so consumers know the required policy.ollow this guide when another service in the platform needs to trust the auth service. Think of it as adding a new ride to the theme park: you must connect power, safety checks, and admission rules before opening the gate.
+- Update API documentation so consumers know the required policy.
 
-## Prerequisites
+Example controller:
 
-- Local environment ready (`guides/local-environment.md`).
-- Service you are integrating can call HTTP endpoints and validate JWTs.
-- Database migrations pipeline capable of updating the `auth` schema.
-
-## 1. Decide What The Service Needs
-
-- List the actions your service must perform (e.g., “Reporting service needs to read employer payment summaries”).
-- Map each action to an existing capability or design a new one.
-- Check `reference/role-catalog.md` to see which roles should trigger the requests.
-
-## 2. Provision Capabilities & Policies
-
-- Use the flow in `guides/extend-access.md` to create capabilities and link them to policies.
-- If the service requires machine-to-machine access, create or update the corresponding service account (e.g., `reporting.service`).
-- Assign roles to the service account in `auth.user_role`.
-
-## 3. Expose API Endpoints
-
-- Annotate controller methods with `@PreAuthorize("hasAuthority('capability.name')")`.
-- Register the endpoint in `auth.endpoint` and link it via `auth.endpoint_policy`.
-- Update API documentation so consumers know the required capability.
+```java
+@GetMapping("/reports/payment-summary")
+@PreAuthorize("hasAnyAuthority('REPORTING_POLICY')")
+public ResponseEntity<PaymentSummary> getPaymentSummary(@AuthenticationPrincipal UserDetails user) {
+    // Implementation
+}
+```
 
 ## 4. Share Authorization Matrix
 
@@ -69,9 +65,10 @@
 
 ## Handy References
 
-- Policy design pattern – `foundations/access-control-101.md`
+- Policy design pattern – `architecture/policy-binding.md`
+- Permission patterns – `architecture/permission-patterns.md`
 - RLS primer – `foundations/data-guardrails-101.md`
 - Troubleshooting flow – `playbooks/troubleshoot-auth.md`
-- Legacy deep dives – `reference/raw/`
+- Policy matrix – `reference/policy-matrix.md`
 
-Integrating another service should feel deliberate, not risky. Follow the steps, lean on the examples, and you’ll keep the platform cohesive.
+Integrating another service should feel deliberate, not risky. Follow the steps, lean on the examples, and you'll keep the platform cohesive.

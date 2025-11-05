@@ -2,7 +2,7 @@
 
 **Navigation:** Previous: [Architecture Overview](overview.md) → Next: [Journey: Login To Data](../guides/login-to-data.md)
 
-This guide maps the PostgreSQL tables that power authentication and authorization. Use it when you need to understand how roles, policies, capabilities, and tenant scopes join together.
+This guide maps the PostgreSQL tables that power authentication and authorization. Use it when you need to understand how roles, policies, endpoints, and tenant scopes join together.
 
 ## Core Entities
 
@@ -13,12 +13,9 @@ erDiagram
     "auth.roles" ||--o{ "auth.user_roles" : ""
     "auth.roles" ||--o{ "auth.role_policies" : "activates"
     "auth.policies" ||--o{ "auth.role_policies" : "activated by"
-    "auth.policies" ||--o{ "auth.policy_capabilities" : "bundles"
-    "auth.capabilities" ||--o{ "auth.policy_capabilities" : ""
     "auth.endpoints" ||--o{ "auth.endpoint_policies" : "guarded by"
     "auth.policies" ||--o{ "auth.endpoint_policies" : ""
     "auth.ui_pages" ||--o{ "auth.page_actions" : "contains"
-    "auth.page_actions" }o--|| "auth.capabilities" : "requires"
     "auth.page_actions" }o--|| "auth.endpoints" : "calls"
 ```
 
@@ -46,7 +43,7 @@ CREATE TABLE auth.role_policies (
 When checking permissions, the system:
 1. Gets user's roles from `user_roles`
 2. Finds policies linked to those roles via `role_policies` junction table
-3. Loads capabilities from those policies via `policy_capabilities`
+3. Validates that at least one policy matches the requested endpoint via `endpoint_policies`
 
 ## Entity Descriptions
 
@@ -90,7 +87,7 @@ Groups users by job function. Think of roles as "responsibility badges" that mul
 ---
 
 ### 📋 **auth.policies** - Rulebooks
-Bundles of capabilities tied to roles via the `role_policies` junction table. A policy says "if you have this role, you can do these things."
+Authorization policies tied to roles via the `role_policies` junction table. A policy represents a collection of permissions that determine what endpoints a role can access.
 
 | Column | Type | Purpose |
 | --- | --- | --- |
@@ -144,45 +141,21 @@ User (business.admin)
 Role (BUSINESS_ADMIN)
   ↓ role_policies (junction table)
 Policy (USER_ACCOUNT_MANAGE_POLICY)
-  ↓ policy_capabilities
-Capabilities (user.account.create, user.account.read, user.account.update, user.account.delete, ...)
+  ↓ endpoint_policies
+Endpoints (POST /api/users, GET /api/users/:id, PUT /api/users/:id, ...)
 ```
 
 **Bootstrap Examples:**
-| Policy | Linked Roles | Capabilities Count |
-|--------|-------------|--------------------|
-| BASIC_USER_POLICY | BASIC_USER | 2 |
-| USER_ACCOUNT_MANAGE_POLICY | BUSINESS_ADMIN, TECHNICAL_BOOTSTRAP | 8 |
-| RBAC_FULL_POLICY | TECHNICAL_BOOTSTRAP | 20+ |
+| Policy | Linked Roles | Protected Endpoints |
+|--------|-------------|---------------------|
+| BASIC_USER_POLICY | BASIC_USER | Profile & Auth endpoints |
+| USER_ACCOUNT_MANAGE_POLICY | BUSINESS_ADMIN, TECHNICAL_BOOTSTRAP | User CRUD operations |
+| RBAC_FULL_POLICY | TECHNICAL_BOOTSTRAP | Role, Policy, Endpoint management |
 
 ---
 
-### 💡 **auth.capabilities** - Atomic Permissions
-Smallest unit of permission (e.g., "read users" or "update user"). Named as `<domain>.<subject>.<action>`.
-
-| Column | Type | Purpose |
-| --- | --- | --- |
-| `id` | BIGINT | Primary key |
-| `name` | VARCHAR | Unique identifier (e.g., user.account.update) |
-| `description` | TEXT | Human-readable purpose |
-| `module` | VARCHAR | Module grouping (user, rbac, policy, etc.) |
-| `action` | VARCHAR | Operation (CREATE, READ, UPDATE, DELETE, etc.) |
-| `resource` | VARCHAR | Target resource (USER, ROLE, POLICY, etc.) |
-| `is_active` | BOOLEAN | Enable/disable capability |
-
-**Examples:**
-- `user.account.create` - Create new user accounts
-- `user.account.read` - View user information
-- `user.account.update` - Modify user details
-- `user.account.delete` - Delete/disable users
-- `rbac.policy.manage` - Manage authorization policies
-
-**Typical Count:** 91 capabilities in bootstrap (can grow to 100+)
-
----
-
-### 🔗 **auth.page_actions** - UI Action Bindings
-Links UI actions to both capabilities (permissions) and endpoints (API calls). **Dual-purpose table**.
+### � **auth.page_actions** - UI Action Bindings
+Links UI actions to endpoints (API calls) for UI rendering and authorization. Determines which buttons/actions appear on each page and which APIs they invoke.
 
 | Column | Type | Purpose |
 | --- | --- | --- |
@@ -190,24 +163,26 @@ Links UI actions to both capabilities (permissions) and endpoints (API calls). *
 | `page_id` | INTEGER | FK to ui_pages (which page) |
 | `label` | VARCHAR | Button/action label (e.g., "Edit User") |
 | `action` | VARCHAR | Action type (CREATE, UPDATE, DELETE, etc.) |
-| `capability_id` | BIGINT | FK to capabilities (permission check) |
-| `endpoint_id` | BIGINT | FK to endpoints (API call target) |
+| `endpoint_id` | BIGINT | FK to endpoints (API call target + permission check) |
 | `icon` | VARCHAR | Icon name for UI |
 | `variant` | VARCHAR | Button style (default, success, danger, etc.) |
 
-**Dual Purpose:**
-1. **Permission Check**: `capability_id` → Does user have this capability?
-2. **API Binding**: `endpoint_id` → Which endpoint to call when clicked?
+**Purpose:**
+- **API Binding**: `endpoint_id` → Which endpoint to call when clicked?
+- **Permission Check**: Endpoint policies determine if user can access the action
+- **UI Rendering**: Label, icon, and variant define how the button appears
 
 **Example:**
 ```sql
 -- "Edit User" button on User Management page
-INSERT INTO auth.page_actions (page_id, label, capability_id, endpoint_id)
+INSERT INTO auth.page_actions (page_id, label, action, endpoint_id, icon, variant)
 VALUES (
   2,                          -- User Management page
   'Edit User',
-  3,                          -- capability: user.account.update
-  71                          -- endpoint: PUT /api/auth/users/{userId}
+  'UPDATE',
+  71,                         -- endpoint: PUT /api/auth/users/{userId}
+  'edit',
+  'default'
 );
 ```
 
@@ -215,9 +190,11 @@ VALUES (
 ```
 GET /api/meta/endpoints?page_id=2
   ↓
-Returns page_actions WHERE user has capability_id
+Returns page_actions for the page
   ↓
-Frontend renders buttons with endpoint_id for API calls
+Backend filters based on user's policies → endpoint_policies
+  ↓
+Frontend renders buttons only for authorized endpoints
 ```
 
 ---
@@ -326,29 +303,8 @@ tech.bootstrap → [user_roles] → TECHNICAL_BOOTSTRAP role
 
 ---
 
-### **auth.policy_capabilities** - Policy ↔ Capability Bundle
-Which capabilities are inside each policy.
-
-| Column | Type | Purpose |
-| --- | --- | --- |
-| `id` | BIGINT | Primary key |
-| `policy_id` | BIGINT | FK to policies (CASCADE on delete/update) |
-| `capability_id` | BIGINT | FK to capabilities (CASCADE on delete/update) |
-
-```
-USER_ACCOUNT_MANAGE_POLICY → [policy_capabilities] → user.account.create
-USER_ACCOUNT_MANAGE_POLICY → [policy_capabilities] → user.account.read
-USER_ACCOUNT_MANAGE_POLICY → [policy_capabilities] → user.account.update
-USER_ACCOUNT_MANAGE_POLICY → [policy_capabilities] → user.account.delete
-```
-
-**Bootstrap Setup:** 56 policy-capability links  
-**FK Behavior:** Deleting a policy or capability automatically removes all related links.
-
----
-
 ### **auth.endpoint_policies** - Endpoint ↔ Policy Guard
-Which policies protect which endpoints.
+Which policies protect which endpoints. This is the core authorization junction table.
 
 | Column | Type | Purpose |
 | --- | --- | --- |
@@ -390,16 +346,16 @@ SELECT EXISTS(
 
 ### Frontend: "What actions can user X perform on page Y?"
 ```sql
--- Get available page actions for a user
+-- Get available page actions for a user based on endpoint access
 SELECT 
   pa.id,
   pa.label,
   pa.action,
-  c.name as capability,
+  pa.icon,
+  pa.variant,
   e.method,
   e.path
 FROM auth.page_actions pa
-JOIN auth.capabilities c ON pa.capability_id = c.id
 JOIN auth.endpoints e ON pa.endpoint_id = e.id
 WHERE pa.page_id = :pageId
   AND EXISTS(
@@ -408,35 +364,11 @@ WHERE pa.page_id = :pageId
     JOIN auth.roles r ON ur.role_id = r.id
     JOIN auth.role_policies rp ON r.id = rp.role_id
     JOIN auth.policies p ON rp.policy_id = p.id
-    JOIN auth.policy_capabilities pc ON p.id = pc.policy_id
+    JOIN auth.endpoint_policies ep ON p.id = ep.policy_id
     WHERE ur.user_id = :userId
+      AND ep.endpoint_id = pa.endpoint_id
       AND rp.is_active = true
-      AND pc.capability_id = pa.capability_id
-  );
-```
-
-### Frontend: "What actions can user X perform on page Y?"
-```sql
--- Get available page actions for a user
-SELECT 
-  pa.id,
-  pa.label,
-  pa.action,
-  c.name as capability,
-  e.method,
-  e.path
-FROM auth.page_actions pa
-JOIN auth.capabilities c ON pa.capability_id = c.id
-JOIN auth.endpoints e ON pa.endpoint_id = e.id
-WHERE pa.page_id = :pageId
-  AND EXISTS(
-    SELECT 1
-    FROM auth.user_roles ur
-    JOIN auth.roles r ON ur.role_id = r.id
-    JOIN auth.policies p ON p.expression->>'roles' ? r.name
-    JOIN auth.policy_capabilities pc ON p.id = pc.policy_id
-    WHERE ur.user_id = :userId
-      AND pc.capability_id = pa.capability_id
+      AND p.is_active = true
   );
 ```
 
@@ -444,23 +376,24 @@ WHERE pa.page_id = :pageId
 
 ## Read Paths (Common Queries)
 
-### "What can user X do?"
+### "What policies does user X have?"
 ```sql
-SELECT DISTINCT c.name
+SELECT DISTINCT p.name, p.description
 FROM auth.users u
 JOIN auth.user_roles ur ON u.id = ur.user_id
 JOIN auth.roles r ON ur.role_id = r.id
 JOIN auth.role_policies rp ON r.id = rp.role_id
 JOIN auth.policies p ON rp.policy_id = p.id
-JOIN auth.policy_capabilities pc ON p.id = pc.policy_id
-JOIN auth.capabilities c ON pc.capability_id = c.id
-WHERE u.id = $1 AND u.status = 'ACTIVE'
-ORDER BY c.name;
+WHERE u.id = $1 
+  AND u.status = 'ACTIVE'
+  AND rp.is_active = true
+  AND p.is_active = true
+ORDER BY p.name;
 ```
 
 ### "Which users can access endpoint X?"
 ```sql
-SELECT DISTINCT u.username
+SELECT DISTINCT u.username, u.email
 FROM auth.endpoints e
 JOIN auth.endpoint_policies ep ON e.id = ep.endpoint_id
 JOIN auth.policies p ON ep.policy_id = p.id
@@ -468,9 +401,33 @@ JOIN auth.role_policies rp ON p.id = rp.policy_id
 JOIN auth.roles r ON rp.role_id = r.id
 JOIN auth.user_roles ur ON r.id = ur.role_id
 JOIN auth.users u ON ur.user_id = u.id
-WHERE e.method = $1 AND e.path = $2
-AND u.status = 'ACTIVE';
+WHERE e.method = $1 
+  AND e.path = $2
+  AND u.status = 'ACTIVE'
+  AND rp.is_active = true
+  AND p.is_active = true;
 ```
+
+### "What data can user X see?" (with RLS)
+```sql
+SELECT u.id, u.employer_id, u.board_id
+FROM auth.user_tenant_acl u
+WHERE user_id = $1;
+
+-- Then filter business queries:
+SELECT * FROM payments 
+WHERE employer_id IN (SELECT employer_id FROM auth.user_tenant_acl WHERE user_id = $1);
+```
+
+## Example: Worker Fetches Payslip
+
+1. `auth.users` record for `worker.demo`.
+2. `auth.user_roles` links user to `WORKER` role.
+3. `auth.role_policies` activates `WORKER_POLICY` for that role.
+4. `auth.endpoint_policies` ensures `GET /payment-requests/:id` requires `WORKER_POLICY`.
+5. `auth.user_tenant_acl` restricts rows to the worker's employer.
+
+Every table participates in the decision.
 
 ### "What data can user X see?" (with RLS)
 ```sql

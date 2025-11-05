@@ -1,6 +1,6 @@
 # Verify Permissions Guide
 
-Run these checks whenever you finish seeding the database, add a new capability, or suspect something is off. They combine RBAC and RLS so you know the end-to-end story still holds.
+Run these checks whenever you finish seeding the database, add a new policy/endpoint, or suspect something is off. They combine RBAC and RLS so you know the end-to-end story still holds.
 
 ## 1. Confirm Authorization Matrix
 
@@ -12,10 +12,11 @@ curl -H "Authorization: Bearer <employer-token>" \
 Expect to see:
 
 - `roles` array with `EMPLOYER`
-- `capabilities` list containing `payment.details.read`, etc.
+- `policies` list containing `EMPLOYER_POLICY`, etc.
+- `endpoints` showing accessible API paths
 - `pages` and `actions` that match the employer experience
 
-If the capability is missing here, the policy mapping is incomplete.
+If a policy is missing here, the role-to-policy mapping is incomplete.
 
 ## 2. Endpoint Access Test
 
@@ -37,8 +38,8 @@ Interpretation:
 ## 3. UI Sanity Check
 
 - Log in as both employer and worker in the front-end.
-- Ensure buttons/pages controlled by the capability appear only for the employer.
-- Inspect the network tab to confirm `/api/me/authorizations` updates after login.
+- Ensure buttons/pages controlled by the endpoint policies appear only for the employer.
+- Inspect the network tab to confirm `/api/me/authorizations` and `/api/meta/endpoints` update after login.
 
 ## 4. RLS Spot Check
 
@@ -54,7 +55,7 @@ SELECT COUNT(*) FROM payment_flow.payment_requests;
 
 Outcome:
 
-- Employer sees multiple rows (their organisation’s data).
+- Employer sees multiple rows (their organisation's data).
 - Worker sees zero or only their own entries.
 
 If counts look wrong, verify `auth.user_tenant_acl` entries.
@@ -68,13 +69,15 @@ ORDER BY created_at DESC
 LIMIT 10;
 ```
 
-- Confirms recent policy or capability changes are recorded.
+- Confirms recent policy or endpoint changes are recorded.
 - Useful when validating production deployments.
 
 ## When Things Fail
 
-- Missing capabilities → Review `guides/extend-access.md`.
+- Missing policies → Review role-to-policy mappings in `auth.role_policies`.
+- Missing endpoints → Check `auth.endpoint_policies` for policy-endpoint links.
 - Endpoint returns 404 instead of 403 → RLS likely hiding the data; check tenant assignments.
 - UI still shows buttons → Ensure the front-end refreshes the authorization matrix after login.
+- Review `guides/extend-access.md` for proper setup steps.
 
 Keep these snippets in a scratch file. Running them often builds confidence in the guardrails.

@@ -35,7 +35,7 @@ psql "$DATABASE_URL" -f docs/ONBOARDING/setup/01_create_roles.sql
 ```
 
 - Repeat for each script until the README checklist is complete.
-- These scripts create roles, policies, capabilities, endpoints, seed users, and RLS configuration.
+- These scripts create roles, policies, endpoints, seed users, and RLS configuration.
 
 ## 5. Configure Local Secrets
 
@@ -61,7 +61,7 @@ psql "$DATABASE_URL" -f docs/ONBOARDING/setup/01_create_roles.sql
 
 ## 8. Next Steps
 
-- Ready to add a new capability? Open `guides/extend-access.md`.
+- Ready to add a new endpoint? Open `guides/extend-access.md`.
 - Need to integrate another service? See `guides/integrate-your-service.md`.
 - Stuck on an error? `playbooks/troubleshoot-auth.md` is organised by symptom.
 
