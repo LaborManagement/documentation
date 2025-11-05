@@ -9,16 +9,8 @@ This guide maps the PostgreSQL tables that power authentication and authorizatio
 ```mermaid
 erDiagram
     "auth.users" ||--o{ "auth.user_roles" : "assigns"
-    "auth.users" ||--o{ "auth.user_tenant_acl" : "scop## Example: Worker Fetches Payslip
-
-1. `auth.users` record for `worker.demo`.
-2. `auth.user_roles` links user to `WORKER` role.
-3. `auth.role_policies` activates `WORKER_POLICY` for that role.
-4. `auth.policy_capabilities` includes `payment.details.read` in `WORKER_POLICY`.
-5. `auth.endpoint_policies` ensures `GET /payment-requests/:id` requires `WORKER_POLICY`.
-6. `auth.user_tenant_acl` restricts rows to the worker's employer.
-
-Every table participates in the decision.uth.roles" ||--o{ "auth.user_roles" : ""
+    "auth.users" ||--o{ "auth.user_tenant_acl" : "scopes"
+    "auth.roles" ||--o{ "auth.user_roles" : ""
     "auth.roles" ||--o{ "auth.role_policies" : "activates"
     "auth.policies" ||--o{ "auth.role_policies" : "activated by"
     "auth.policies" ||--o{ "auth.policy_capabilities" : "bundles"
