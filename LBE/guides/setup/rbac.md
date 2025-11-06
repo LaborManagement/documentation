@@ -9,15 +9,13 @@ Follow this sequence whenever you onboard a new tenant or extend permissions. Tr
 ```mermaid
 flowchart TD
     A[Plan roles] --> B[Create policies]
-    B --> C[Define capabilities]
-    C --> D[Register endpoints]
-    C --> E[Map UI pages & actions]
-    D --> F[Bind endpoint to policy]
-    C --> F
-    E --> G[Surface in authorization matrix]
-    F --> H[Assign policy to roles]
-    H --> I[Assign roles to users]
-    I --> J[Verify behaviour]
+    B --> C[Register endpoints]
+    B --> D[Map UI pages & actions]
+    C --> E[Bind endpoint to policy]
+    D --> F[Surface in authorization matrix]
+    E --> G[Assign policy to roles]
+    G --> H[Assign roles to users]
+    H --> I[Verify behaviour]
 ```
 
 ## 1. Plan Roles & Personas
@@ -28,12 +26,12 @@ flowchart TD
 
 ## 2. Create Or Update Policies
 
-Policies bundle capabilities and tie an endpoint to a set of roles.
+Policies define the access boundary and tie protected operations to the roles that can exercise them.
 
 **Via SQL:**
 ```sql
 -- Insert a policy if it doesn't exist
-INSERT INTO auth.policy (name, description)
+INSERT INTO auth.policies (name, description)
 VALUES ('EMPLOYER_POLICY', 'Employer actions for payment reconciliation')
 ON CONFLICT (name) DO NOTHING;
 ```
@@ -72,56 +70,11 @@ Content-Type: application/json
 ```
 (where `roleIds` correspond to EMPLOYER and TEST_USER roles)
 
-## 3. Define Capabilities
-
-Use the `<domain>.<subject>.<action>` naming convention.
+## 3. Register Endpoints
 
 **Via SQL:**
 ```sql
-INSERT INTO auth.capability (name, description)
-VALUES ('payment.ledger.download', 'Download employer payment ledger CSV')
-ON CONFLICT (name) DO NOTHING;
-```
-
-**Via API (UI):**
-```http
-POST /api/admin/capabilities
-Content-Type: application/json
-
-{
-  "name": "payment.ledger.download",
-  "description": "Download employer payment ledger CSV"
-}
-```
-
-Map capabilities to the policy:
-
-**Via SQL:**
-```sql
-INSERT INTO auth.policy_capability (policy_id, capability_id)
-SELECT p.id, c.id
-FROM auth.policy p, auth.capability c
-WHERE p.name = 'EMPLOYER_POLICY'
-  AND c.name = 'payment.ledger.download'
-ON CONFLICT (policy_id, capability_id) DO NOTHING;
-```
-
-**Via API (UI):**
-```http
-POST /api/admin/policies/{policyId}/capabilities
-Content-Type: application/json
-
-{
-  "capabilityIds": [12]
-}
-```
-(where `capabilityIds` is the ID of the `payment.ledger.download` capability)
-
-## 4. Register Endpoints
-
-**Via SQL:**
-```sql
-INSERT INTO auth.endpoint (method, path, label)
+INSERT INTO auth.endpoints (method, path, label)
 VALUES ('GET', '/api/employer/payment-ledger', 'Download employer payment ledger')
 ON CONFLICT (method, path) DO NOTHING;
 ```
@@ -142,9 +95,9 @@ Bind the endpoint to the policy:
 
 **Via SQL:**
 ```sql
-INSERT INTO auth.endpoint_policy (endpoint_id, policy_id)
+INSERT INTO auth.endpoint_policies (endpoint_id, policy_id)
 SELECT e.id, p.id
-FROM auth.endpoint e, auth.policy p
+FROM auth.endpoints e, auth.policies p
 WHERE e.method = 'GET'
   AND e.path = '/api/employer/payment-ledger'
   AND p.name = 'EMPLOYER_POLICY'
@@ -162,11 +115,11 @@ Content-Type: application/json
 ```
 (where `endpointId` is the GET /api/employer/payment-ledger endpoint ID and `policyIds` contains EMPLOYER_POLICY ID)
 
-## 5. Wire UI Pages & Actions
+## 4. Wire UI Pages & Actions
 
 ### Understanding page_actions Table
 The `page_actions` table serves a **dual purpose**:
-1. **Permission Check**: Links to `capability_id` to determine if user can see the action
+1. **Permission Check**: Links to `policy_id` to determine if the user can see the action
 2. **API Binding**: Links to `endpoint_id` to specify which endpoint to call
 
 **Schema:**
@@ -175,7 +128,7 @@ CREATE TABLE auth.page_actions (
     id BIGSERIAL PRIMARY KEY,
     page_id INTEGER REFERENCES auth.ui_pages(id),
     label VARCHAR(64) NOT NULL,
-    capability_id BIGINT REFERENCES auth.capabilities(id),
+    policy_id BIGINT REFERENCES auth.policies(id),
     endpoint_id BIGINT REFERENCES auth.endpoints(id),
     -- other fields...
 );
@@ -188,7 +141,7 @@ User loads page
 Call: GET /api/meta/endpoints?page_id={id}
   ↓
 Backend returns page_actions WHERE:
-  - user has the required capability_id
+  - user has the required policy through their active roles
   - endpoint_id is not null
   ↓
 Frontend renders buttons/actions with API endpoints
@@ -196,20 +149,18 @@ Frontend renders buttons/actions with API endpoints
 
 **Via SQL:**
 ```sql
--- Create page action with both capability and endpoint
-INSERT INTO auth.page_actions (page_id, label, capability_id, endpoint_id)
+-- Create page action with both policy and endpoint
+INSERT INTO auth.page_actions (page_id, label, policy_id, endpoint_id)
 SELECT 
     p.id,
     'Download Ledger',
-    c.id,
+    pol.id,
     e.id
 FROM auth.ui_pages p
-CROSS JOIN auth.capabilities c
-CROSS JOIN auth.endpoints e
-WHERE p.page_id = 'EMPLOYER_DASHBOARD'
-  AND c.name = 'payment.ledger.download'
-  AND e.method = 'GET'
+JOIN auth.policies pol ON pol.name = 'EMPLOYER_POLICY'
+JOIN auth.endpoints e ON e.method = 'GET'
   AND e.path = '/api/employer/payment-ledger'
+WHERE p.page_id = 'EMPLOYER_DASHBOARD'
 ON CONFLICT DO NOTHING;
 ```
 
@@ -222,7 +173,7 @@ Content-Type: application/json
 {
   "pageId": 5,
   "label": "Download Ledger",
-  "capabilityId": 12,
+  "policyId": 7,
   "endpointId": 45
 }
 ```
@@ -233,17 +184,17 @@ Content-Type: application/json
 SELECT 
     pa.id,
     pa.label,
-    c.name as capability,
+    pol.name as policy,
     e.method,
     e.path,
-    STRING_AGG(DISTINCT p.name, ', ') as policies
+    STRING_AGG(DISTINCT p.name, ', ') as endpoint_policies
 FROM auth.page_actions pa
-JOIN auth.capabilities c ON pa.capability_id = c.id
+JOIN auth.policies pol ON pa.policy_id = pol.id
 JOIN auth.endpoints e ON pa.endpoint_id = e.id
-JOIN auth.policy_capabilities pc ON c.id = pc.capability_id
-JOIN auth.policies p ON pc.policy_id = p.id
+JOIN auth.endpoint_policies ep ON e.id = ep.endpoint_id
+JOIN auth.policies p ON ep.policy_id = p.id
 WHERE pa.page_id = 2  -- User Management page
-GROUP BY pa.id, pa.label, c.name, e.method, e.path
+GROUP BY pa.id, pa.label, pol.name, e.method, e.path
 ORDER BY pa.id;
 ```
 
@@ -252,7 +203,7 @@ ORDER BY pa.id;
 2. Only render buttons/actions returned in the response
 3. Use the `endpoint` field to make API calls when clicked
 
-## 6. Assign Roles To Users
+## 5. Assign Roles To Users
 
 **Via SQL:**
 ```sql
@@ -277,7 +228,7 @@ Content-Type: application/json
 
 If creating service accounts, ensure credentials are stored securely and tokens carry the correct audience.
 
-## 7. Verify The Setup
+## 6. Verify The Setup
 
 ### Backend Verification
 1. **Test endpoint authorization** with both allowed and disallowed users (expect 200 vs 403):
@@ -291,16 +242,14 @@ curl -H "Authorization: Bearer $BASIC_TOKEN"
   http://localhost:8080/api/auth/users
 ```
 
-2. **Check capability resolution**:
+2. **Check policy resolution**:
 ```sql
--- What capabilities does this user have?
-SELECT DISTINCT c.name
+-- What policies does this user have?
+SELECT DISTINCT p.name
 FROM auth.user_roles ur
 JOIN auth.roles r ON ur.role_id = r.id
 JOIN auth.role_policies rp ON r.id = rp.role_id
 JOIN auth.policies p ON rp.policy_id = p.id
-JOIN auth.policy_capabilities pc ON p.id = pc.policy_id
-JOIN auth.capabilities c ON pc.capability_id = c.id
 WHERE ur.user_id = 123
   AND rp.is_active = true
   AND p.is_active = true;
@@ -330,7 +279,7 @@ Authorization: Bearer $USER_TOKEN
     {
       "id": 2,
       "label": "Create User",
-      "capability": "user.account.create",
+      "policy": "USER_ADMIN_POLICY",
       "endpoint": {
         "method": "POST",
         "path": "/api/auth/users"
@@ -350,54 +299,11 @@ LIMIT 10;
 
 ## Troubleshooting Tips
 
-- **Capability missing** – Check `auth.policy_capabilities` and verify policy is linked to user's role
-- **Endpoint still returns 403** – Verify `auth.endpoint_policies` has the correct policy_id
-- **Button visible but API fails** – Check that `page_actions.endpoint_id` matches the endpoint with correct policy
-- **Page action not showing** – Verify both `capability_id` and `endpoint_id` are set in `page_actions`
-- **UI shows wrong actions** – Clear frontend cache and verify `/api/meta/endpoints` returns correct data
-
-## Next Steps
-
-Once RBAC is wired, continue to [VPD Setup Playbook](vpd.md) to configure tenant-level data guardrails.
-
-## 6. Assign Roles To Users
-
-**Via SQL:**
-```sql
-INSERT INTO auth.user_role (user_id, role_id)
-SELECT u.id, r.id
-FROM auth.user u, auth.role r
-WHERE u.username = 'employer.demo'
-  AND r.name = 'EMPLOYER'
-ON CONFLICT (user_id, role_id) DO NOTHING;
-```
-
-**Via API (UI):**
-```http
-POST /api/admin/users/{userId}/roles
-Content-Type: application/json
-
-{
-  "roleIds": [2]
-}
-```
-(where `userId` is the ID of employer.demo user and `roleIds` contains EMPLOYER role ID)
-
-If creating service accounts, ensure credentials are stored securely and tokens carry the correct audience.
-
-## 7. Verify The Setup
-
-1. Call `/api/me/authorizations` with the user’s JWT; confirm the new capability appears.
-2. Invoke the guarded endpoint with both an allowed and disallowed user (expect 200 vs 403).
-3. Run `SET ROLE app_payment_flow; SELECT auth.set_user_context(':userId');` followed by a data query to ensure RLS returns the correct rows.
-4. Check audit logs for recorded access decisions.
-
-## Troubleshooting Tips
-
-- **Capability missing** – Recheck `auth.policy_capabilities` and `auth.role_policies` junction tables.
-- **Endpoint still open** – Confirm controller annotation and `auth.endpoint_policies` entry.
-- **Button still visible for others** – Verify UI uses the authorization matrix to gate rendering.
-- **Role-policy not active** – Check `is_active` flag in `auth.role_policies` table.
+- **Policy missing for user** – Confirm `auth.role_policies` contains the assignment and `is_active = true`
+- **Endpoint still returns 403** – Verify `auth.endpoint_policies` references the expected policy and that policy is attached to the caller’s role
+- **Button visible but API fails** – Ensure `page_actions.policy_id` aligns with the endpoint’s guarding policy
+- **Page action not showing** – Check both `policy_id` and `endpoint_id` fields in `page_actions`, and confirm the policy is active
+- **UI shows wrong actions** – Clear frontend cache and confirm `/api/meta/endpoints` reflects the latest page action definitions
 
 ## Next Steps
 
