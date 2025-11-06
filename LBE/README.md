@@ -40,6 +40,7 @@ Follow this path step by step—each document links directly to the next so you 
 - **Concept Primers** – `foundations/access-control-101.md`, `foundations/data-guardrails-101.md`, `foundations/postgres-for-auth.md`
 - **Troubleshooting** – `playbooks/troubleshoot-auth.md`
 - **Bootstrap SQL** – `onboarding/setup/` (run alongside Steps 4 and 5)
+- **Data Access Patterns** – `guides/data-access-patterns.md` (when choosing between JPA, jOOQ DSL, or SQL templates)
 
 ## Keeping Docs In Sync
 
