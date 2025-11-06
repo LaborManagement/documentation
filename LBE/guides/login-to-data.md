@@ -51,7 +51,7 @@ sequenceDiagram
 ```
 
 - `roles` contains the RBAC roles assigned to the user.
-- `pv` (permission version) increments whenever capabilities change; cached decisions can be invalidated.
+- `pv` (permission version) increments whenever policy assignments change; cached decisions can be invalidated.
 - `jti` allows revoking a token early if needed.
 
 The auth service verifies:
@@ -84,41 +84,38 @@ flowchart LR
 flowchart TD
     Endpoint["HTTP Method + Path"]
     Policy["Required Policy"]
-    Capability["Required Capability"]
 
     Endpoint --> Policy
-    Policy --> Capability
 ```
 
-1. The controller or route advertises the required capability (e.g., `payment.details.read`).
+1. The controller or route advertises the required policy (e.g., `EMPLOYER_POLICY`).
 2. `auth.endpoint_policies` reveals which policy guards the route.
-3. `auth.policy_capabilities` confirms the policy carries the required capability.
+3. The access layer checks the user's resolved policies before letting the request through.
 
 ### Persona Snapshot
 
-| Persona | Endpoint | Capability Needed | Outcome |
+| Persona | Endpoint | Policy Needed | Outcome |
 | --- | --- | --- | --- |
-| Wanda Worker | `GET /api/worker/payments/:id` | `payment.details.read` | Allowed by WORKER policy |
-| Eddie Employer | `POST /api/employer/approvals` | `payment.approval.submit` | Allowed by EMPLOYER policy |
-| Bella Board | `GET /api/board/summary` | `board.summary.read` | Allowed by BOARD policy |
+| Wanda Worker | `GET /api/worker/payments/:id` | `WORKER_POLICY` | Allowed by WORKER_POLICY |
+| Eddie Employer | `POST /api/employer/approvals` | `EMPLOYER_POLICY` | Allowed by EMPLOYER_POLICY |
+| Bella Board | `GET /api/board/summary` | `BOARD_POLICY` | Allowed by BOARD_POLICY |
 
-If the capability is missing, the service returns `403 Forbidden`.
+If the policy is missing, the service returns `403 Forbidden`.
 
 ## Step 4 – Shape The UI Experience
 
 - After login, the front-end calls `/api/me/authorizations`.
-- The response includes roles, capabilities, UI pages, and actions.
-- Components hide buttons or entire pages unless the capability list contains the required entry.
+- The response includes roles, policies, UI pages, and actions.
+- Components hide buttons or entire pages unless the policy list contains the required entry.
 
 Example response fragment for Eddie:
 
 ```json
 {
   "roles": ["EMPLOYER"],
-  "capabilities": [
-    "payment.details.read",
-    "payment.approval.submit",
-    "ui.page.employer.dashboard.view"
+  "policies": [
+    "EMPLOYER_POLICY",
+    "EMPLOYER_UI"
   ],
   "uiActions": [
     "ui.action.employer.approval.click"
@@ -155,4 +152,4 @@ If tenant data is missing or incorrect, RLS may return zero rows, leading to a `
 
 ## Ready To Build?
 
-You now know the journey from login to data access. Continue to [RBAC Setup Playbook](setup/rbac.md) to learn how to create roles, policies, capabilities, endpoints, and UI bindings in the correct order.
+You now know the journey from login to data access. Continue to [RBAC Setup Playbook](setup/rbac.md) to learn how to create roles, policies, endpoints, and UI bindings in the correct order.
