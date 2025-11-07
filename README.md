@@ -3,6 +3,7 @@
 **Centralized documentation for the Labor Banking Exchange (LBE) platform services**
 
 This repository serves as the single source of truth for:
+
 - 📋 Architecture guides and patterns
 - 🛠️ Development standards and best practices
 - 🚀 Workspace setup and developer onboarding
@@ -93,16 +94,19 @@ documentation/
 ## 🔑 Key Documents
 
 ### For New Developers
+
 1. **[workspace-setup/WORKSPACE_SETUP.md](workspace-setup/WORKSPACE_SETUP.md)** - Set up your development environment
 2. **[LBE/foundations/access-control-101.md](LBE/foundations/access-control-101.md)** - Understand RBAC
 3. **[LBE/architecture/overview.md](LBE/architecture/overview.md)** - System architecture overview
 
 ### For Backend Developers
+
 1. **[LBE/guides/data-access-patterns.md](LBE/guides/data-access-patterns.md)** ⭐ - **When to use JPA, jOOQ DSL, or SQL templates**
 2. **[LBE/guides/request-lifecycle.md](LBE/guides/request-lifecycle.md)** - How requests flow through services
 3. **[LBE/guides/integrate-your-service.md](LBE/guides/integrate-your-service.md)** - Integrate with the platform
 
 ### For Understanding Security
+
 1. **[LBE/foundations/access-control-101.md](LBE/foundations/access-control-101.md)** - RBAC concepts
 2. **[LBE/foundations/data-guardrails-101.md](LBE/foundations/data-guardrails-101.md)** - Row-level security
 3. **[LBE/architecture/policy-binding.md](LBE/architecture/policy-binding.md)** - How permissions connect
@@ -120,6 +124,7 @@ This documentation is designed to work with GitHub Copilot. Each service reposit
 ### How It Works
 
 When you open the **multi-root workspace** (`lbe-services.code-workspace`), GitHub Copilot can:
+
 - ✅ Read all documentation files
 - ✅ Reference patterns from guides
 - ✅ Follow service-specific rules from `.github/copilot-instructions.md`
@@ -128,6 +133,7 @@ When you open the **multi-root workspace** (`lbe-services.code-workspace`), GitH
 ### Service Copilot Instructions
 
 Each service has embedded guidelines:
+
 - **auth-service/.github/copilot-instructions.md** - Auth service patterns
 - **payment-flow-service/.github/copilot-instructions.md** - Payment flow patterns
 - **reconciliation-service/.github/copilot-instructions.md** - Reconciliation patterns
@@ -142,10 +148,10 @@ These files embed content from this documentation project and add service-specif
 
 **See:** [LBE/guides/data-access-patterns.md](LBE/guides/data-access-patterns.md)
 
-| Pattern | Use When | Example |
-|---------|----------|---------|
-| **Spring Data JPA** | CRUD operations, entity lifecycle, auditing | `userRepository.save(user)` |
-| **jOOQ DSL** | Complex reads, multi-table joins, type safety | `dsl.select()...from()...join()` |
+| Pattern                  | Use When                                         | Example                                |
+| ------------------------ | ------------------------------------------------ | -------------------------------------- |
+| **Spring Data JPA**      | CRUD operations, entity lifecycle, auditing      | `userRepository.save(user)`            |
+| **jOOQ DSL**             | Complex reads, multi-table joins, type safety    | `dsl.select()...from()...join()`       |
 | **jOOQ + SQL Templates** | Analyst-owned queries, reports, frequent changes | `SqlTemplateLoader.load("report.sql")` |
 
 ### Architecture Patterns
@@ -168,15 +174,14 @@ These files embed content from this documentation project and add service-specif
 
 ```mermaid
 graph TD
-    UI[Admin UI] --> Gateway[API Gateway]
-    Gateway --> Auth[Auth Service]
+    Gateway[API Gateway] --> Auth[Auth Service]
     Gateway --> Payment[Payment Flow Service]
     Gateway --> Recon[Reconciliation Service]
-    
-    Auth --> DB[(PostgreSQL - Auth Schema)]
-    Payment --> DB
-    Recon --> DB
-    
+
+    Auth --> AuthDB[(PostgreSQL: Auth Schema)]
+    Payment --> PaymentDB[(PostgreSQL: Payment Schema)]
+    Recon --> ReconDB[(PostgreSQL: Reconciliation Schema)]
+
     Auth -.-> Shared[Shared Library]
     Payment -.-> Shared
     Recon -.-> Shared
@@ -184,11 +189,10 @@ graph TD
 
 ### Services
 
-- **auth-service** - Authentication, authorization, user/role/policy management
-- **payment-flow-service** - Payment processing and worker/employer management
-- **reconciliation-service** - Payment reconciliation workflows
-- **shared-lib** - Common utilities, exceptions, and patterns
-- **admin-ui** - React-based administrative interface
+- auth-service: Authentication, authorization, user/role/policy management
+- payment-flow-service: Payment processing and worker/employer management
+- reconciliation-service: Payment reconciliation workflows
+- shared-lib: Common utilities, exceptions, and patterns
 
 ---
 
@@ -222,6 +226,7 @@ When you update a guide in this repository:
 ## 🚀 Distribution Models
 
 ### Option 1: Monorepo (Current Setup)
+
 All services and documentation in one repository. Developers clone once.
 
 ```bash
@@ -230,6 +235,7 @@ code lbe-services.code-workspace
 ```
 
 ### Option 2: Separate Repositories
+
 Each service is its own repository. Documentation repository is cloned first.
 
 ```bash
@@ -245,6 +251,7 @@ code lbe-services.code-workspace
 ```
 
 ### Option 3: Documentation as Submodule
+
 Each service includes documentation as a Git submodule.
 
 ```bash
@@ -260,12 +267,15 @@ git clone <auth-service-repo> --recursive
 After opening `lbe-services.code-workspace`:
 
 ### Test 1: Documentation Access
+
 1. Open any copilot-instructions.md file
 2. Cmd+Click on a documentation path
 3. Should open the file from the documentation folder
 
 ### Test 2: Copilot Code Generation
+
 In any Java service file, type:
+
 ```java
 // Create a method to fetch active users with pagination using jOOQ DSL
 ```
@@ -273,7 +283,9 @@ In any Java service file, type:
 Copilot should generate code following `LBE/guides/data-access-patterns.md`.
 
 ### Test 3: Cross-Service Context
+
 In payment-flow-service, type:
+
 ```java
 // Call auth service to verify user has payment.approve policy
 ```
