@@ -1,0 +1,57 @@
+{
+  "folders": [
+    {
+      "name": "📚 Documentation",
+      "path": "../../.."
+    },
+    {
+      "name": "🔐 Auth Service",
+      "path": "../../../auth-service"
+    },
+    {
+      "name": "💰 Payment Flow Service",
+      "path": "../../../payment-flow-service"
+    },
+    {
+      "name": "🔄 Reconciliation Service",
+      "path": "../../../reconciliation-service"
+    },
+    {
+      "name": "📦 Shared Library",
+      "path": "../../../shared-lib"
+    },
+    {
+      "name": "🎨 Admin UI",
+      "path": "../../../admin-ui"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.git": true,
+      "**/node_modules": true,
+      "**/target": true,
+      "**/.DS_Store": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/target": true,
+      "**/.git": true
+    },
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.compile.nullAnalysis.mode": "automatic",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "vscjava.vscode-java-pack",
+      "vmware.vscode-spring-boot",
+      "GitHub.copilot",
+      "GitHub.copilot-chat",
+      "esbenp.prettier-vscode",
+      "dbaeumer.vscode-eslint"
+    ]
+  }
+}

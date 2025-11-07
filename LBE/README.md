@@ -1,6 +1,12 @@
-# Auth Service Journey
+# LBE Platform Documentation
 
 Follow this path step by step—each document links directly to the next so you always know where to go.
+
+## 🚀 Quick Start
+
+**New to the platform?** Start here:
+- **[Workspace Setup](workspace-setup/QUICK_START.md)** – Get your development environment running in 5 minutes
+- **[Full Setup Guide](workspace-setup/WORKSPACE_SETUP.md)** – Detailed multi-root workspace configuration
 
 ## Guided Path
 
@@ -41,6 +47,31 @@ Follow this path step by step—each document links directly to the next so you 
 - **Troubleshooting** – `playbooks/troubleshoot-auth.md`
 - **Bootstrap SQL** – `onboarding/setup/` (run alongside Steps 4 and 5)
 - **Data Access Patterns** – `guides/data-access-patterns.md` (when choosing between JPA, jOOQ DSL, or SQL templates)
+
+## 🛠️ Developer Tools
+
+### GitHub Copilot Integration
+
+Each service includes `.github/copilot-instructions.md` with embedded coding standards. These files ensure Copilot generates code following platform patterns:
+
+- **auth-service** – RBAC, JWT validation, policy enforcement
+- **payment-flow-service** – Payment processing, worker/employer management
+- **reconciliation-service** – Transaction matching, settlement processing
+
+### Multi-root Workspace Setup
+
+For the best development experience with cross-service context:
+
+1. **[Quick Start](workspace-setup/QUICK_START.md)** – Fast setup commands
+2. **[Full Setup Guide](workspace-setup/WORKSPACE_SETUP.md)** – Detailed configuration options
+3. **[Clone Script](workspace-setup/clone-all.sh)** – Automated repository cloning
+4. **[Workspace Config](workspace-setup/lbe-services.code-workspace)** – VS Code multi-root workspace
+
+**Benefits:**
+- ✅ GitHub Copilot can reference documentation across all projects
+- ✅ Unified search across services
+- ✅ Single VS Code window for all services
+- ✅ Consistent formatting and code generation
 
 ## Keeping Docs In Sync
 
