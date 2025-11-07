@@ -1,20 +1,27 @@
 # Journey: Login To Data
 
-**Navigation:** Previous## Step 2 – Resolve Roles & Policies
+**Navigation:** Previous: [Data Map](../architecture/data-map.md) → Next: [RBAC Setup Play## Step 5 – Apply Row-Level Security (RLS)
 
 ```mermaid
-flowchart LR
-    Token["JWT roles"]
-    Role["auth.user_roles"]
-    Policy["auth.role_policies"]
+sequenceDiagram
+    participant Auth
+    participant DB as PostgreSQL
 
-    Token --> Role
-    Role --> Policy
+    Auth->>DB: SELECT auth.set_user_context(:userId)
+    Note over DB: Loads user's tenant ACL<br/>from auth.user_tenant_acl
+    Auth->>DB: Business query (e.g., payment_flow.payment_requests)
+    Note over DB: RLS policies filter rows<br/>based on loaded ACL
+    DB-->>Auth: Rows matching tenant ACL
 ```
 
-- Wanda's token lists `WORKER`, Eddie's lists `EMPLOYER`, Bella's lists `BOARD`.
-- The service loads additional role assignments from `auth.user_roles` (useful for service accounts or secondary roles).
-- Each role activates one or more policies via the `auth.role_policies` junction table (e.g., `EMPLOYER` → `EMPLOYER_POLICY`)./architecture/data-map.md) → Next: [RBAC Setup Playbook](setup/rbac.md)
+- After JWT validation, the service extracts `uid` (user ID) from the token.
+- `auth.set_user_context(uid)` queries `auth.user_tenant_acl` and loads the user's allowed (board_id, employer_id) pairs into the PostgreSQL session.
+- Wanda's ACL restricts results to her worker ID and employer.
+- Eddie's ACL grants rows for his employer's data.
+- Bella's ACL typically covers all boards/employers, so she sees everything.
+- **Critical:** Tenant information is NOT in the JWT—it's dynamically loaded from the database for each request.
+
+If tenant data is missing or incorrect in `auth.user_tenant_acl`, RLS may return zero rows, leading to a `404` from the API even though the record exists in the table.d)
 
 Walk through the entire experience of a user hitting the platform, from login to seeing their data. Meet our three tour guides:
 
@@ -39,26 +46,29 @@ sequenceDiagram
 
 ```json
 {
-  "iss": "https://idp.lbe.local",
+  "iss": "payment-reconciliation-service",
   "sub": "wanda.worker",
+  "aud": "payment-reconciliation-api",
+  "jti": "b7d2d8e6-...",
   "uid": 1042,
-  "roles": ["WORKER"],
-  "pv": 7,
+  "pv": 1,
   "iat": 1730355600,
-  "exp": 1730359200,
-  "jti": "b7d2d8e6-..."
+  "exp": 1730359200
 }
 ```
 
-- `roles` contains the RBAC roles assigned to the user.
-- `pv` (permission version) increments whenever policy assignments change; cached decisions can be invalidated.
-- `jti` allows revoking a token early if needed.
+- `uid` (user ID) identifies the authenticated user.
+- `pv` (permission version) tracks policy changes; incremented when user's role/policy assignments change.
+- `sub` (subject) contains the username.
+- `jti` (JWT ID) allows revoking a token early if needed.
+- **Important:** JWT does NOT contain roles or tenant information. These are resolved server-side from database tables after token validation.
 
 The auth service verifies:
 
-1. Signature matches the configured public key.
+1. Signature matches the configured secret key.
 2. Token is unexpired (`exp`).
-3. Token is not revoked (optional cache lookup).
+3. Issuer (`iss`) and audience (`aud`) match expected values.
+4. Token is not revoked (optional cache lookup using `jti`).
 
 If any check fails, the service sends `401 Unauthorized`.
 
@@ -94,11 +104,11 @@ flowchart TD
 
 ### Persona Snapshot
 
-| Persona | Endpoint | Policy Needed | Outcome |
-| --- | --- | --- | --- |
-| Wanda Worker | `GET /api/worker/payments/:id` | `WORKER_POLICY` | Allowed by WORKER_POLICY |
+| Persona        | Endpoint                       | Policy Needed     | Outcome                    |
+| -------------- | ------------------------------ | ----------------- | -------------------------- |
+| Wanda Worker   | `GET /api/worker/payments/:id` | `WORKER_POLICY`   | Allowed by WORKER_POLICY   |
 | Eddie Employer | `POST /api/employer/approvals` | `EMPLOYER_POLICY` | Allowed by EMPLOYER_POLICY |
-| Bella Board | `GET /api/board/summary` | `BOARD_POLICY` | Allowed by BOARD_POLICY |
+| Bella Board    | `GET /api/board/summary`       | `BOARD_POLICY`    | Allowed by BOARD_POLICY    |
 
 If the policy is missing, the service returns `403 Forbidden`.
 
@@ -113,13 +123,8 @@ Example response fragment for Eddie:
 ```json
 {
   "roles": ["EMPLOYER"],
-  "policies": [
-    "EMPLOYER_POLICY",
-    "EMPLOYER_UI"
-  ],
-  "uiActions": [
-    "ui.action.employer.approval.click"
-  ]
+  "policies": ["EMPLOYER_POLICY", "EMPLOYER_UI"],
+  "uiActions": ["ui.action.employer.approval.click"]
 }
 ```
 
