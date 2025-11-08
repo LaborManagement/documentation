@@ -13,12 +13,11 @@ flowchart TD
     B -->|Yes| D["Extract user_id<br/>& roles from JWT"]
     D --> E["Load user's roles<br/>from auth.user_roles"]
     E --> F["Resolve policies<br/>from auth.role_policies"]
-    F --> G["Load capabilities<br/>from auth.policy_capabilities"]
-    G --> H{Endpoint<br/>requires<br/>policy?}
-    H -->|Yes| I{User has<br/>required<br/>capability?}
-    I -->|No| J["❌ 403 Forbidden<br/>(Missing capability)"]
-    I -->|Yes| K["✅ Allow endpoint<br/>execution"]
-    H -->|No| K
+    F --> G{Endpoint<br/>requires<br/>policy?}
+    G -->|Yes| H{User has<br/>required<br/>policy?}
+    H -->|No| J["❌ 403 Forbidden<br/>(Missing policy)"]
+    H -->|Yes| K["✅ Allow endpoint<br/>execution"]
+    G -->|No| K
     K --> L["Execute endpoint<br/>with RLS applied"]
     L --> M["Query includes<br/>user_tenant_acl<br/>predicate"]
     M --> N["Return filtered<br/>results"]
@@ -36,7 +35,7 @@ flowchart TD
 - If failed: Return **401 Unauthorized**
 
 ```http
-GET /api/admin/capabilities HTTP/1.1
+GET /api/admin/roles HTTP/1.1
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 # Response if invalid:
@@ -148,7 +147,7 @@ SELECT ep.policy_id
 FROM auth.endpoint_policies ep
 JOIN auth.endpoints e ON ep.endpoint_id = e.id
 WHERE e.method = 'GET' 
-  AND e.path = '/api/admin/capabilities'
+  AND e.path = '/api/admin/roles'
   AND ep.policy_id IN (
     SELECT p.id FROM auth.policies 
     WHERE name IN ('EMPLOYEE_POLICY', 'VIEWER_POLICY')
@@ -157,27 +156,14 @@ WHERE e.method = 'GET'
 -- Result: Found VIEWER_POLICY → ✅ ALLOW
 ```
 
-### **Step 4: Load Capabilities**
+### **Step 4: Execute Endpoint (with RLS)**
 ```sql
--- What can alice do?
-SELECT c.name, c.description
-FROM auth.capabilities c
-JOIN auth.policy_capabilities pc ON c.id = pc.capability_id
-JOIN auth.policies p ON pc.policy_id = p.id
-WHERE p.name IN ('EMPLOYEE_POLICY', 'VIEWER_POLICY');
-
--- Result:
--- - capability.view (View any capability)
--- - audit.view (View audit logs)
--- - user.view (View user directory)
-```
-
-### **Step 5: Execute Endpoint (with RLS)**
-```sql
--- Return capabilities, but only those alice's organization uses
-SELECT c.* FROM auth.capabilities c
-WHERE organization_id IN (
-  SELECT employer_id FROM auth.user_tenant_acl
+-- Return only roles alice's organization can manage
+SELECT r.*
+FROM auth.roles r
+WHERE r.organization_id IN (
+  SELECT employer_id
+  FROM auth.user_tenant_acl
   WHERE user_id = 'alice-uuid'
 );
 ```
@@ -186,16 +172,11 @@ WHERE organization_id IN (
 ```json
 HTTP/1.1 200 OK
 {
-  "capabilities": [
+  "roles": [
     {
-      "id": "cap-001",
-      "name": "capability.view",
-      "description": "View any capability"
-    },
-    {
-      "id": "cap-002",
-      "name": "audit.view",
-      "description": "View audit logs"
+      "id": "role-001",
+      "name": "Viewer",
+      "description": "Can view admin dashboards"
     }
   ],
   "timestamp": "2025-11-02T10:30:00Z"
@@ -204,8 +185,8 @@ HTTP/1.1 200 OK
 
 And audit log records:
 ```sql
-INSERT INTO audit.access_log (user_id, endpoint, capability, result, timestamp)
-VALUES ('alice-uuid', 'GET /api/admin/capabilities', 'capability.view', 'ALLOWED', NOW());
+INSERT INTO audit.access_log (user_id, endpoint, policy, result, timestamp)
+VALUES ('alice-uuid', 'GET /api/admin/roles', 'VIEWER_POLICY', 'ALLOWED', NOW());
 ```
 
 ---
@@ -232,7 +213,7 @@ Response:
         "method": "POST",
         "path": "/api/auth/users"
       },
-      "capability": "user.account.create"
+      "policy": "USER_ACCOUNT_CREATE_POLICY"
     },
     {
       "id": 3,
@@ -242,7 +223,7 @@ Response:
         "method": "GET",
         "path": "/api/auth/users"
       },
-      "capability": "user.account.read"
+      "policy": "USER_ACCOUNT_READ_POLICY"
     },
     {
       "id": 4,
@@ -252,7 +233,7 @@ Response:
         "method": "PUT",
         "path": "/api/auth/users/{userId}"
       },
-      "capability": "user.account.update"
+      "policy": "USER_ACCOUNT_UPDATE_POLICY"
     }
   ]
 }
@@ -264,33 +245,36 @@ Response:
 SELECT 
     pa.id,
     pa.label,
-    c.name as capability,
+    p.name as policy,
     e.id as endpoint_id,
     e.method,
     e.path
 FROM auth.page_actions pa
-JOIN auth.capabilities c ON pa.capability_id = c.id
+JOIN auth.policies p ON pa.policy_id = p.id
 JOIN auth.endpoints e ON pa.endpoint_id = e.id
 WHERE pa.page_id = :pageId
-  AND pa.capability_id IN (
-    -- User's capabilities from their roles
-    SELECT DISTINCT pc.capability_id
+  AND pa.policy_id IN (
+    -- User's policies derived from their active roles
+    SELECT DISTINCT p2.id
     FROM auth.user_roles ur
-    JOIN auth.policies p ON p.expression->>'roles' ? ur.role_id::text
-    JOIN auth.policy_capabilities pc ON p.id = pc.policy_id
+    JOIN auth.role_policies rp ON ur.role_id = rp.role_id
+    JOIN auth.policies p2 ON rp.policy_id = p2.id
     WHERE ur.user_id = :userId
+      AND ur.is_active = true
+      AND rp.is_active = true
+      AND p2.is_active = true
   );
 ```
 
 ### **Dual Relationship in page_actions**
 Each page action has two critical fields:
-- **capability_id**: Which permission is required to see this action
+- **policy_id**: Which policy is required to see this action
 - **endpoint_id**: Which API endpoint to call when action is triggered
 
 ```
 User clicks "Edit User" button
   ↓
-UI checks: Does user have capability "user.account.update"? ✓
+UI checks: Does user have policy "USER_ACCOUNT_UPDATE_POLICY"? ✓
   ↓
 UI calls endpoint: PUT /api/auth/users/{userId}
   ↓
@@ -302,7 +286,7 @@ Success!
 **Why dual relationships?**
 - **Frontend**: Uses `page_actions` → `endpoint` to decide which controls to render (menu + action metadata)
 - **Backend**: Uses `endpoint_policies` to enforce policy requirements before code executes
-- Together they ensure UI visibility and API authorization stay in sync without an extra capability layer.
+- Together they ensure UI visibility and API authorization stay in sync because both reference the same policy bindings.
 
 ---
 
@@ -358,7 +342,7 @@ Reason: User's policies don't include ROLE_MANAGE_POLICY
 ### **Optimization Points**
 
 1. **JWT Caching** – Cache decoded JWT in request context (5-10ms savings)
-2. **Role/Policy Cache** – Cache per-user capabilities with TTL (100ms refresh)
+2. **Role/Policy Cache** – Cache per-user policies with TTL (100ms refresh)
 3. **Endpoint Registry** – In-memory map of endpoints (instant lookup)
 4. **Index Hints** – Add indexes on `user_id`, `policy_id`, `endpoint_id`
 
