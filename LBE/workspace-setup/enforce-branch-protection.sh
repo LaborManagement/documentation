@@ -50,14 +50,19 @@ DEV_BRANCH="${DEV_BRANCH:-develop}"
 MAIN_BRANCH="${MAIN_BRANCH:-main}"
 
 # Teams/users/apps allowed to push directly to develop.
-DEV_ALLOWED_TEAMS=("DevServ") # team slug, not display name
-DEV_ALLOWED_USERS=()
+DEV_ALLOWED_TEAMS=("devserv") # use the GitHub team slug
+DEV_ALLOWED_USERS=("rahulcharvekar")
 DEV_ALLOWED_APPS=()
 
 # Teams/users/apps allowed to push directly to main (leave empty to require PRs).
 MAIN_ALLOWED_TEAMS=()
-MAIN_ALLOWED_USERS=("@rahulcharvekar")
+MAIN_ALLOWED_USERS=("rahulcharvekar")
 MAIN_ALLOWED_APPS=()
+
+# Optional: actors allowed to bypass pull request requirements on main.
+MAIN_BYPASS_TEAMS=()
+MAIN_BYPASS_USERS=("rahulcharvekar")
+MAIN_BYPASS_APPS=()
 
 MAIN_REQUIRED_REVIEWS="${MAIN_REQUIRED_REVIEWS:-2}"
 
@@ -214,6 +219,9 @@ MAIN_USERS_JSON=$(json_array "${MAIN_ALLOWED_USERS[@]-}")
 MAIN_TEAMS_JSON=$(json_array "${MAIN_ALLOWED_TEAMS[@]-}")
 MAIN_APPS_JSON=$(json_array "${MAIN_ALLOWED_APPS[@]-}")
 MAIN_RESTRICTIONS=$(build_restrictions "$MAIN_USERS_JSON" "$MAIN_TEAMS_JSON" "$MAIN_APPS_JSON")
+MAIN_BYPASS_USERS_JSON=$(json_array "${MAIN_BYPASS_USERS[@]-}")
+MAIN_BYPASS_TEAMS_JSON=$(json_array "${MAIN_BYPASS_TEAMS[@]-}")
+MAIN_BYPASS_APPS_JSON=$(json_array "${MAIN_BYPASS_APPS[@]-}")
 read -r -d '' MAIN_PR_REVIEWS <<JSON || true
 {
   "dismissal_restrictions": {
@@ -222,7 +230,13 @@ read -r -d '' MAIN_PR_REVIEWS <<JSON || true
   },
   "dismiss_stale_reviews": true,
   "require_code_owner_reviews": true,
-  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS}
+  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS},
+  "require_last_push_approval": false,
+  "bypass_pull_request_allowance": {
+    "users": ${MAIN_BYPASS_USERS_JSON},
+    "teams": ${MAIN_BYPASS_TEAMS_JSON},
+    "apps": ${MAIN_BYPASS_APPS_JSON}
+  }
 }
 JSON
 MAIN_PAYLOAD=$(build_payload "$MAIN_RESTRICTIONS" "$MAIN_PR_REVIEWS" "$MAIN_ALLOW_FORCE_PUSHES" "$MAIN_ALLOW_DELETIONS")
