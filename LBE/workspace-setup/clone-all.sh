@@ -10,7 +10,7 @@ echo "===================================="
 echo ""
 
 # Configuration - Update these URLs with your actual repository locations
-GITHUB_ORG="your-org"  # Change this to your GitHub organization or username
+GITHUB_ORG="LaborManagement"  # Change this to your GitHub organization or username
 BASE_URL="https://github.com/${GITHUB_ORG}"
 
 # Repositories to clone
