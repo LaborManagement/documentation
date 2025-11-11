@@ -4,8 +4,8 @@ set -euo pipefail
 
 # LBE Services - Branch Protection Enforcer
 #
-# Applies consistent branch protection for develop and main across multiple
-# repositories via the GitHub CLI.
+# Applies consistent branch protection for the develop and main branches across
+# multiple repositories via the GitHub CLI.
 
 usage() {
   cat <<'USAGE'
@@ -22,14 +22,12 @@ Key environment overrides:
   DEV_BRANCH               Name of the collaboration branch (default: develop)
   MAIN_BRANCH              Name of the protected branch (default: main)
   DEV_REQUIRE_PR_REVIEWS   Require PR approvals on develop (default: false)
+  DEV_REQUIRED_REVIEWS     # of approvals when DEV_REQUIRE_PR_REVIEWS=true (default: 1)
   MAIN_REQUIRE_PR_REVIEWS  Require PR approvals on main (default: false)
+  MAIN_REQUIRED_REVIEWS    # of approvals when MAIN_REQUIRE_PR_REVIEWS=true (default: 2)
   DRY_RUN=true             Preview payloads without calling the API
   AUTO_DISCOVER=true       Use gh repo list + REPO_PATTERN to build repo list
   REPO_PATTERN             jq regex used with AUTO_DISCOVER
-
-Examples:
-  GITHUB_ORG=my-org ./enforce-branch-protection.sh billing-service ledger-service
-  GITHUB_ORG=my-org AUTO_DISCOVER=true REPO_PATTERN='-service$' ./enforce-branch-protection.sh
 USAGE
 }
 
@@ -54,8 +52,13 @@ DEV_ALLOWED_APPS=()
 
 # Teams/users/apps allowed to push directly to main (empty => nobody).
 MAIN_ALLOWED_TEAMS=()
-MAIN_ALLOWED_USERS=("@rahulcharvekar")
+MAIN_ALLOWED_USERS=("rahulcharvekar")
 MAIN_ALLOWED_APPS=()
+
+# Optional: actors that can bypass PR requirements when MAIN_REQUIRE_PR_REVIEWS=true.
+MAIN_BYPASS_TEAMS=()
+MAIN_BYPASS_USERS=("rahulcharvekar")
+MAIN_BYPASS_APPS=()
 
 DEV_REQUIRE_PR_REVIEWS="${DEV_REQUIRE_PR_REVIEWS:-false}"
 DEV_REQUIRED_REVIEWS="${DEV_REQUIRED_REVIEWS:-1}"
@@ -146,6 +149,40 @@ build_restrictions() {
 JSON
 }
 
+build_pr_reviews() {
+  local approvals="$1"
+  local dismiss_stale="$2"
+  local codeowners="$3"
+  local bypass_users_json="$4"
+  local bypass_teams_json="$5"
+  local bypass_apps_json="$6"
+
+  local bypass_block=""
+  if [[ "$bypass_users_json" != "[]" || "$bypass_teams_json" != "[]" || "$bypass_apps_json" != "[]" ]]; then
+    read -r -d '' bypass_block <<JSON || true
+,
+  "require_last_push_approval": false,
+  "bypass_pull_request_allowance": {
+    "users": ${bypass_users_json},
+    "teams": ${bypass_teams_json},
+    "apps": ${bypass_apps_json}
+  }
+JSON
+  fi
+
+  cat <<JSON
+{
+  "dismissal_restrictions": {
+    "users": [],
+    "teams": []
+  },
+  "dismiss_stale_reviews": ${dismiss_stale},
+  "require_code_owner_reviews": ${codeowners},
+  "required_approving_review_count": ${approvals}${bypass_block}
+}
+JSON
+}
+
 build_payload() {
   local restrictions_json="$1"
   local pr_reviews_json="$2"
@@ -163,24 +200,6 @@ build_payload() {
   "required_linear_history": true,
   "allow_fork_syncing": false,
   "block_creations": true
-}
-JSON
-}
-
-build_pr_reviews() {
-  local approvals="$1"
-  local dismiss_stale="$2"
-  local codeowners="$3"
-
-  cat <<JSON
-{
-  "dismissal_restrictions": {
-    "users": [],
-    "teams": []
-  },
-  "dismiss_stale_reviews": ${dismiss_stale},
-  "require_code_owner_reviews": ${codeowners},
-  "required_approving_review_count": ${approvals}
 }
 JSON
 }
@@ -226,7 +245,7 @@ DEV_TEAMS_JSON=$(json_array "${DEV_ALLOWED_TEAMS[@]-}")
 DEV_APPS_JSON=$(json_array "${DEV_ALLOWED_APPS[@]-}")
 DEV_RESTRICTIONS=$(build_restrictions "$DEV_USERS_JSON" "$DEV_TEAMS_JSON" "$DEV_APPS_JSON")
 if [[ "$DEV_REQUIRE_PR_REVIEWS" == "true" ]]; then
-  DEV_PR_REVIEWS=$(build_pr_reviews "$DEV_REQUIRED_REVIEWS" false false)
+  DEV_PR_REVIEWS=$(build_pr_reviews "$DEV_REQUIRED_REVIEWS" false false "[]" "[]" "[]")
 else
   DEV_PR_REVIEWS="null"
 fi
@@ -236,52 +255,14 @@ MAIN_USERS_JSON=$(json_array "${MAIN_ALLOWED_USERS[@]-}")
 MAIN_TEAMS_JSON=$(json_array "${MAIN_ALLOWED_TEAMS[@]-}")
 MAIN_APPS_JSON=$(json_array "${MAIN_ALLOWED_APPS[@]-}")
 MAIN_RESTRICTIONS=$(build_restrictions "$MAIN_USERS_JSON" "$MAIN_TEAMS_JSON" "$MAIN_APPS_JSON")
-<<<<<<< HEAD
-<<<<<<< HEAD
 if [[ "$MAIN_REQUIRE_PR_REVIEWS" == "true" ]]; then
-  MAIN_PR_REVIEWS=$(build_pr_reviews "$MAIN_REQUIRED_REVIEWS" true true)
+  MAIN_BYPASS_USERS_JSON=$(json_array "${MAIN_BYPASS_USERS[@]-}")
+  MAIN_BYPASS_TEAMS_JSON=$(json_array "${MAIN_BYPASS_TEAMS[@]-}")
+  MAIN_BYPASS_APPS_JSON=$(json_array "${MAIN_BYPASS_APPS[@]-}")
+  MAIN_PR_REVIEWS=$(build_pr_reviews "$MAIN_REQUIRED_REVIEWS" true true "$MAIN_BYPASS_USERS_JSON" "$MAIN_BYPASS_TEAMS_JSON" "$MAIN_BYPASS_APPS_JSON")
 else
   MAIN_PR_REVIEWS="null"
 fi
-=======
-<<<<<<< HEAD
-=======
->>>>>>> 81039cd (Update branch protection: allow rahulcharvekar to push to main)
-MAIN_BYPASS_USERS_JSON=$(json_array "${MAIN_BYPASS_USERS[@]-}")
-MAIN_BYPASS_TEAMS_JSON=$(json_array "${MAIN_BYPASS_TEAMS[@]-}")
-MAIN_BYPASS_APPS_JSON=$(json_array "${MAIN_BYPASS_APPS[@]-}")
-read -r -d '' MAIN_PR_REVIEWS <<JSON || true
-{
-  "dismissal_restrictions": {
-    "users": [],
-    "teams": []
-  },
-  "dismiss_stale_reviews": true,
-  "require_code_owner_reviews": true,
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 4cb6cb8 (Update branch protection: allow rahulcharvekar to push to main)
-  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS},
-  "require_last_push_approval": false,
-  "bypass_pull_request_allowance": {
-    "users": ${MAIN_BYPASS_USERS_JSON},
-    "teams": ${MAIN_BYPASS_TEAMS_JSON},
-    "apps": ${MAIN_BYPASS_APPS_JSON}
-  }
-<<<<<<< HEAD
-=======
-  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS}
->>>>>>> 8e019ea (Enforce branch rules)
-=======
->>>>>>> 4cb6cb8 (Update branch protection: allow rahulcharvekar to push to main)
-=======
-  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS}
->>>>>>> d33d806 (Enforce branch rules)
-}
-JSON
->>>>>>> 96ac2ba (Enforce branch rules)
 MAIN_PAYLOAD=$(build_payload "$MAIN_RESTRICTIONS" "$MAIN_PR_REVIEWS" "$MAIN_ALLOW_FORCE_PUSHES" "$MAIN_ALLOW_DELETIONS")
 
 echo "Configuring branch protection on ${#SERVICE_REPOS[@]} repositories in ${GITHUB_ORG} (host: ${GH_HOST})"
