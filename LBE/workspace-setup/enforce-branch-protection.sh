@@ -64,7 +64,7 @@ MAIN_BYPASS_TEAMS=()
 MAIN_BYPASS_USERS=("rahulcharvekar")
 MAIN_BYPASS_APPS=()
 
-MAIN_REQUIRED_REVIEWS="${MAIN_REQUIRED_REVIEWS:-2}"
+MAIN_REQUIRED_REVIEWS="${MAIN_REQUIRED_REVIEWS:-0}"
 
 DEV_ALLOW_FORCE_PUSHES="${DEV_ALLOW_FORCE_PUSHES:-false}"
 DEV_ALLOW_DELETIONS="${DEV_ALLOW_DELETIONS:-false}"
@@ -82,7 +82,7 @@ SERVICE_REPOS=(
     "documentation"
     "auth-service"
     "payment-flow-service"
-    "reconciliation-service"
+    "recon-service"
     "shared-lib"
     "admin-ui"
 )
