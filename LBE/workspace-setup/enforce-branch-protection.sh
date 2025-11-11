@@ -237,6 +237,7 @@ MAIN_TEAMS_JSON=$(json_array "${MAIN_ALLOWED_TEAMS[@]-}")
 MAIN_APPS_JSON=$(json_array "${MAIN_ALLOWED_APPS[@]-}")
 MAIN_RESTRICTIONS=$(build_restrictions "$MAIN_USERS_JSON" "$MAIN_TEAMS_JSON" "$MAIN_APPS_JSON")
 <<<<<<< HEAD
+<<<<<<< HEAD
 if [[ "$MAIN_REQUIRE_PR_REVIEWS" == "true" ]]; then
   MAIN_PR_REVIEWS=$(build_pr_reviews "$MAIN_REQUIRED_REVIEWS" true true)
 else
@@ -244,11 +245,11 @@ else
 fi
 =======
 <<<<<<< HEAD
+=======
+>>>>>>> 81039cd (Update branch protection: allow rahulcharvekar to push to main)
 MAIN_BYPASS_USERS_JSON=$(json_array "${MAIN_BYPASS_USERS[@]-}")
 MAIN_BYPASS_TEAMS_JSON=$(json_array "${MAIN_BYPASS_TEAMS[@]-}")
 MAIN_BYPASS_APPS_JSON=$(json_array "${MAIN_BYPASS_APPS[@]-}")
-=======
->>>>>>> 8e019ea (Enforce branch rules)
 read -r -d '' MAIN_PR_REVIEWS <<JSON || true
 {
   "dismissal_restrictions": {
@@ -258,6 +259,9 @@ read -r -d '' MAIN_PR_REVIEWS <<JSON || true
   "dismiss_stale_reviews": true,
   "require_code_owner_reviews": true,
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 4cb6cb8 (Update branch protection: allow rahulcharvekar to push to main)
   "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS},
   "require_last_push_approval": false,
   "bypass_pull_request_allowance": {
@@ -265,9 +269,12 @@ read -r -d '' MAIN_PR_REVIEWS <<JSON || true
     "teams": ${MAIN_BYPASS_TEAMS_JSON},
     "apps": ${MAIN_BYPASS_APPS_JSON}
   }
+<<<<<<< HEAD
 =======
   "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS}
 >>>>>>> 8e019ea (Enforce branch rules)
+=======
+>>>>>>> 4cb6cb8 (Update branch protection: allow rahulcharvekar to push to main)
 }
 JSON
 >>>>>>> 96ac2ba (Enforce branch rules)
