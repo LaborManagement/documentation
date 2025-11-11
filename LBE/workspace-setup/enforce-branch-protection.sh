@@ -260,6 +260,7 @@ read -r -d '' MAIN_PR_REVIEWS <<JSON || true
   "require_code_owner_reviews": true,
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> 4cb6cb8 (Update branch protection: allow rahulcharvekar to push to main)
   "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS},
@@ -275,6 +276,9 @@ read -r -d '' MAIN_PR_REVIEWS <<JSON || true
 >>>>>>> 8e019ea (Enforce branch rules)
 =======
 >>>>>>> 4cb6cb8 (Update branch protection: allow rahulcharvekar to push to main)
+=======
+  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS}
+>>>>>>> d33d806 (Enforce branch rules)
 }
 JSON
 >>>>>>> 96ac2ba (Enforce branch rules)
