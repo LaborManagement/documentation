@@ -54,7 +54,7 @@ DEV_ALLOWED_APPS=()
 
 # Teams/users/apps allowed to push directly to main (empty => nobody).
 MAIN_ALLOWED_TEAMS=()
-MAIN_ALLOWED_USERS=("rahulcharvekar")
+MAIN_ALLOWED_USERS=("@rahulcharvekar")
 MAIN_ALLOWED_APPS=()
 
 DEV_REQUIRE_PR_REVIEWS="${DEV_REQUIRE_PR_REVIEWS:-false}"
