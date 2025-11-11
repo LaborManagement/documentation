@@ -64,7 +64,11 @@ MAIN_BYPASS_TEAMS=()
 MAIN_BYPASS_USERS=("rahulcharvekar")
 MAIN_BYPASS_APPS=()
 
-MAIN_REQUIRED_REVIEWS="${MAIN_REQUIRED_REVIEWS:-0}"
+
+MAIN_ALLOWED_USERS=("@rahulcharvekar")
+MAIN_ALLOWED_APPS=()
+
+MAIN_REQUIRED_REVIEWS="${MAIN_REQUIRED_REVIEWS:-2}"
 
 DEV_ALLOW_FORCE_PUSHES="${DEV_ALLOW_FORCE_PUSHES:-false}"
 DEV_ALLOW_DELETIONS="${DEV_ALLOW_DELETIONS:-false}"
@@ -219,6 +223,12 @@ MAIN_USERS_JSON=$(json_array "${MAIN_ALLOWED_USERS[@]-}")
 MAIN_TEAMS_JSON=$(json_array "${MAIN_ALLOWED_TEAMS[@]-}")
 MAIN_APPS_JSON=$(json_array "${MAIN_ALLOWED_APPS[@]-}")
 MAIN_RESTRICTIONS=$(build_restrictions "$MAIN_USERS_JSON" "$MAIN_TEAMS_JSON" "$MAIN_APPS_JSON")
+<<<<<<< HEAD
+MAIN_BYPASS_USERS_JSON=$(json_array "${MAIN_BYPASS_USERS[@]-}")
+MAIN_BYPASS_TEAMS_JSON=$(json_array "${MAIN_BYPASS_TEAMS[@]-}")
+MAIN_BYPASS_APPS_JSON=$(json_array "${MAIN_BYPASS_APPS[@]-}")
+=======
+>>>>>>> 8e019ea (Enforce branch rules)
 read -r -d '' MAIN_PR_REVIEWS <<JSON || true
 {
   "dismissal_restrictions": {
@@ -227,7 +237,17 @@ read -r -d '' MAIN_PR_REVIEWS <<JSON || true
   },
   "dismiss_stale_reviews": true,
   "require_code_owner_reviews": true,
+<<<<<<< HEAD
+  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS},
+  "require_last_push_approval": false,
+  "bypass_pull_request_allowance": {
+    "users": ${MAIN_BYPASS_USERS_JSON},
+    "teams": ${MAIN_BYPASS_TEAMS_JSON},
+    "apps": ${MAIN_BYPASS_APPS_JSON}
+  }
+=======
   "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS}
+>>>>>>> 8e019ea (Enforce branch rules)
 }
 JSON
 MAIN_PAYLOAD=$(build_payload "$MAIN_RESTRICTIONS" "$MAIN_PR_REVIEWS" "$MAIN_ALLOW_FORCE_PUSHES" "$MAIN_ALLOW_DELETIONS")
