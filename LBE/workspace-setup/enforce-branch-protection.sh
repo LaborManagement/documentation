@@ -4,35 +4,33 @@ set -euo pipefail
 
 # LBE Services - Branch Protection Enforcer
 #
-# This script configures consistent protection settings for the develop and main
-# branches across multiple repositories via the GitHub CLI (gh). Update the
-# configuration section below or pass repository names as arguments, then run:
-#   ./enforce-branch-protection.sh repo-one repo-two
-#
-# Environment variables can override most defaults (see usage output).
+# Applies consistent branch protection for develop and main across multiple
+# repositories via the GitHub CLI.
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 Usage: ./enforce-branch-protection.sh [repo-one repo-two ...]
 
 Arguments:
-  repo-one repo-two ...   Optional positional list of repositories that live
-                          under <org>/<repo>. When omitted, the script falls
-                          back to SERVICE_REPOS or AUTO_DISCOVER.
+  repo-one repo-two ...   Optional list of repositories under <org>/<repo>.
+                          When omitted the script uses SERVICE_REPOS or
+                          AUTO_DISCOVER.
 
 Key environment overrides:
-  GITHUB_ORG             Target GitHub organization/owner (default: your-org)
-  GH_HOST                GitHub host if you use GHES (default: github.com)
-  DEV_BRANCH             Name of the team branch (default: develop)
-  MAIN_BRANCH            Name of the protected branch (default: main)
-  DRY_RUN=true           Preview payloads without calling the API
-  AUTO_DISCOVER=true     Use gh repo list + REPO_PATTERN to build repo list
-  REPO_PATTERN           jq regex passed to gh repo list when auto-discovering
+  GITHUB_ORG               Target GitHub organization/owner (default: LaborManagement)
+  GH_HOST                  GitHub host if you use GHES (default: github.com)
+  DEV_BRANCH               Name of the collaboration branch (default: develop)
+  MAIN_BRANCH              Name of the protected branch (default: main)
+  DEV_REQUIRE_PR_REVIEWS   Require PR approvals on develop (default: false)
+  MAIN_REQUIRE_PR_REVIEWS  Require PR approvals on main (default: false)
+  DRY_RUN=true             Preview payloads without calling the API
+  AUTO_DISCOVER=true       Use gh repo list + REPO_PATTERN to build repo list
+  REPO_PATTERN             jq regex used with AUTO_DISCOVER
 
 Examples:
   GITHUB_ORG=my-org ./enforce-branch-protection.sh billing-service ledger-service
   GITHUB_ORG=my-org AUTO_DISCOVER=true REPO_PATTERN='-service$' ./enforce-branch-protection.sh
-EOF
+USAGE
 }
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -41,7 +39,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Configuration
+# Configuration (override with env vars as needed)
 # -----------------------------------------------------------------------------
 
 GH_HOST="${GH_HOST:-github.com}"
@@ -50,29 +48,18 @@ DEV_BRANCH="${DEV_BRANCH:-develop}"
 MAIN_BRANCH="${MAIN_BRANCH:-main}"
 
 # Teams/users/apps allowed to push directly to develop.
-DEV_ALLOWED_TEAMS=("DevServ") # team slug, not display name
-DEV_ALLOWED_USERS=()
+DEV_ALLOWED_TEAMS=("devserv")
+DEV_ALLOWED_USERS=("rahulcharvekar")
 DEV_ALLOWED_APPS=()
 
-# Teams/users/apps allowed to push directly to main (leave empty to require PRs).
+# Teams/users/apps allowed to push directly to main (empty => nobody).
 MAIN_ALLOWED_TEAMS=()
-MAIN_ALLOWED_USERS=("@rahulcharvekar")
+MAIN_ALLOWED_USERS=("rahulcharvekar")
 MAIN_ALLOWED_APPS=()
 
-# Optional: actors allowed to bypass pull request requirements on main.
-MAIN_BYPASS_TEAMS=()
-MAIN_BYPASS_USERS=("rahulcharvekar")
-MAIN_BYPASS_APPS=()
-
-
-MAIN_ALLOWED_USERS=("@rahulcharvekar")
-MAIN_ALLOWED_APPS=()
-
-# Optional: actors allowed to bypass pull request requirements on main.
-MAIN_BYPASS_TEAMS=()
-MAIN_BYPASS_USERS=("rahulcharvekar")
-MAIN_BYPASS_APPS=()
-
+DEV_REQUIRE_PR_REVIEWS="${DEV_REQUIRE_PR_REVIEWS:-false}"
+DEV_REQUIRED_REVIEWS="${DEV_REQUIRED_REVIEWS:-1}"
+MAIN_REQUIRE_PR_REVIEWS="${MAIN_REQUIRE_PR_REVIEWS:-false}"
 MAIN_REQUIRED_REVIEWS="${MAIN_REQUIRED_REVIEWS:-2}"
 
 DEV_ALLOW_FORCE_PUSHES="${DEV_ALLOW_FORCE_PUSHES:-false}"
@@ -85,15 +72,14 @@ REPO_PATTERN="${REPO_PATTERN:-}"
 REPO_FETCH_LIMIT="${REPO_FETCH_LIMIT:-200}"
 DRY_RUN="${DRY_RUN:-false}"
 
-# Populate this list when not passing repo names as arguments or using
-# AUTO_DISCOVER. Each entry should be the repository name without the org.
+# Populate this list when not passing repo names as arguments or using AUTO_DISCOVER.
 SERVICE_REPOS=(
-    "documentation"
-    "auth-service"
-    "payment-flow-service"
-    "recon-service"
-    "shared-lib"
-    "admin-ui"
+  "documentation"
+  "auth-service"
+  "payment-flow-service"
+  "recon-service"
+  "shared-lib"
+  "admin-ui"
 )
 
 # -----------------------------------------------------------------------------
@@ -181,6 +167,24 @@ build_payload() {
 JSON
 }
 
+build_pr_reviews() {
+  local approvals="$1"
+  local dismiss_stale="$2"
+  local codeowners="$3"
+
+  cat <<JSON
+{
+  "dismissal_restrictions": {
+    "users": [],
+    "teams": []
+  },
+  "dismiss_stale_reviews": ${dismiss_stale},
+  "require_code_owner_reviews": ${codeowners},
+  "required_approving_review_count": ${approvals}
+}
+JSON
+}
+
 configure_branch() {
   local repo="$1"
   local branch="$2"
@@ -221,47 +225,22 @@ DEV_USERS_JSON=$(json_array "${DEV_ALLOWED_USERS[@]-}")
 DEV_TEAMS_JSON=$(json_array "${DEV_ALLOWED_TEAMS[@]-}")
 DEV_APPS_JSON=$(json_array "${DEV_ALLOWED_APPS[@]-}")
 DEV_RESTRICTIONS=$(build_restrictions "$DEV_USERS_JSON" "$DEV_TEAMS_JSON" "$DEV_APPS_JSON")
-DEV_PR_REVIEWS="null"
+if [[ "$DEV_REQUIRE_PR_REVIEWS" == "true" ]]; then
+  DEV_PR_REVIEWS=$(build_pr_reviews "$DEV_REQUIRED_REVIEWS" false false)
+else
+  DEV_PR_REVIEWS="null"
+fi
 DEV_PAYLOAD=$(build_payload "$DEV_RESTRICTIONS" "$DEV_PR_REVIEWS" "$DEV_ALLOW_FORCE_PUSHES" "$DEV_ALLOW_DELETIONS")
 
 MAIN_USERS_JSON=$(json_array "${MAIN_ALLOWED_USERS[@]-}")
 MAIN_TEAMS_JSON=$(json_array "${MAIN_ALLOWED_TEAMS[@]-}")
 MAIN_APPS_JSON=$(json_array "${MAIN_ALLOWED_APPS[@]-}")
 MAIN_RESTRICTIONS=$(build_restrictions "$MAIN_USERS_JSON" "$MAIN_TEAMS_JSON" "$MAIN_APPS_JSON")
-MAIN_BYPASS_USERS_JSON=$(json_array "${MAIN_BYPASS_USERS[@]-}")
-MAIN_BYPASS_TEAMS_JSON=$(json_array "${MAIN_BYPASS_TEAMS[@]-}")
-MAIN_BYPASS_APPS_JSON=$(json_array "${MAIN_BYPASS_APPS[@]-}")
-read -r -d '' MAIN_PR_REVIEWS <<JSON || true
-{
-  "dismissal_restrictions": {
-    "users": [],
-    "teams": []
-  },
-  "dismiss_stale_reviews": true,
-  "require_code_owner_reviews": true,
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 4cb6cb8 (Update branch protection: allow rahulcharvekar to push to main)
-  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS},
-  "require_last_push_approval": false,
-  "bypass_pull_request_allowance": {
-    "users": ${MAIN_BYPASS_USERS_JSON},
-    "teams": ${MAIN_BYPASS_TEAMS_JSON},
-    "apps": ${MAIN_BYPASS_APPS_JSON}
-  }
-<<<<<<< HEAD
-=======
-  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS}
->>>>>>> 8e019ea (Enforce branch rules)
-=======
->>>>>>> 4cb6cb8 (Update branch protection: allow rahulcharvekar to push to main)
-=======
-  "required_approving_review_count": ${MAIN_REQUIRED_REVIEWS}
->>>>>>> d33d806 (Enforce branch rules)
-}
-JSON
+if [[ "$MAIN_REQUIRE_PR_REVIEWS" == "true" ]]; then
+  MAIN_PR_REVIEWS=$(build_pr_reviews "$MAIN_REQUIRED_REVIEWS" true true)
+else
+  MAIN_PR_REVIEWS="null"
+fi
 MAIN_PAYLOAD=$(build_payload "$MAIN_RESTRICTIONS" "$MAIN_PR_REVIEWS" "$MAIN_ALLOW_FORCE_PUSHES" "$MAIN_ALLOW_DELETIONS")
 
 echo "Configuring branch protection on ${#SERVICE_REPOS[@]} repositories in ${GITHUB_ORG} (host: ${GH_HOST})"
